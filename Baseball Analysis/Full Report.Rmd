@@ -1,0 +1,181 @@
+---
+title: "Pacific Association Player Report"
+subtitle: "How the Sonoma Stompers dominated the league at the plate and on the mound"
+author: "Tim Livingston - OPS 804"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+source("HittersReport.R")
+source("PitchersReport.R")
+library(tufte)
+
+# Comment DK: Very nice. Extra points for using new data set.
+```
+
+# Introduction
+
+This report is to determine the range of hitter performances accross the Pacific Association based on an advanced metric that have been developed to account for the most accurate measure of how well a player is doing relative to the league. We will use one metric for a hitter and one for a pitcher. For hitters, we are going with Weighted Runs Created Plus (wRC+). For pitchers, Fielding Independent Pitching (FIP). With the Sonoma Stompers winning the championship this season, I wanted to take a look at how well our team did relative to the rest of the teams in the league, and to see whether or not this is a performance that can be repeated or not.
+
+wRC+ is based on a percentage scale, where 100 is considered league average. Any points above mean that players are that much better and vice versa for players lower. For example, if a player has a wRC+ of 130, that means he's 30% better than the league average player. If his WRC+ is 75 instead, he's 25% worse than the league average player. 
+
+FIP is a lot like Earned Run Average (ERA), but only accounts for what a pitcher can control: strikeouts, walks, and home runs. This is to make sure we take any bad luck out of the equation thanks to poor defense, putting the pitchers on a more level playing field. 
+
+To go through this data, I did a couple of arbitrary cutoffs to account for the best possible data. First, for wRC+, I set a minimum of 100 plate appearances (PA), close to the median of 101. 100 is more of a round number and can be used going forward as a good measure to gauge players who were a part of the league for a good amount of time. This year, the league average wRC+ was 88, with a median of 92. The data for the hitting report is as follows:
+
+```{r, echo = FALSE}
+library(knitr)
+kable(Hitters)
+```
+
+And the pitchers, who had a league-wide mean FIP of 4.46 and a median of 4.01, giving us 51 pitchers that were at or above the median value for innings pitched, which was just above 14:
+
+```{r, echo = FALSE}
+library(knitr)
+kable(Pitchers)
+```
+
+As a general rule, players who played with multiple teams will be considered with the team they played the most for this year using the given parameters, as the data they gathered in the small sample with their second team wouldn't affect the overall performance. 
+
+I ran descriptive stats for the Hitters:
+
+```{r, echo = FALSE}
+library(e1071)
+library(dplyr)
+library(knitr)
+kable(Hitters %>%
+  summarise(
+    count = NROW(wRC),
+    sum = sum(wRC),
+    min = min(wRC),
+    max = max(wRC),
+    mean = round(mean(wRC)),
+    median = round(median(wRC)),
+    range = (max - min),
+    q1 = round(quantile(wRC, c(0.25)), digits=-1),
+    q3 = round(quantile(wRC, c(0.75)), digits=-1),
+    iqr = IQR(wRC),
+    sd = round(sd(wRC)),
+    var = round(var(wRC)),
+    kurt = round(kurtosis(wRC), digits=4),
+    skew = round(skewness(wRC), digits=4)
+  ))
+```
+
+Now the descriptive stats for the pitchers:
+
+```{r, echo = FALSE}
+library(e1071)
+library(dplyr)
+library(knitr)
+kable(Pitchers %>%
+  summarise(
+    count = NROW(FIP),
+    sum = sum(FIP),
+    min = min(FIP),
+    max = max(FIP),
+    mean = round(mean(FIP), digits=2),
+    median = round(median(FIP), digits=2),
+    range = (max - min),
+    q1 = round(quantile(FIP, c(0.25)), digits=2),
+    q3 = round(quantile(FIP, c(0.75)), digits=2),
+    iqr = IQR(FIP),
+    sd = round(sd(FIP), digits=2),
+    var = round(var(FIP), digits=2),
+    kurt = round(kurtosis(FIP), digits=4),
+    skew = round(skewness(FIP), digits=4)
+  )
+)
+```
+
+Next, the ANOVA analysis, using numerous tests to determine what the data set looks like on a team by team basis. The given hypothesis is that hitting performance was similar amongst all teams in the league. Same with pitching. First, the hitters (NOTE: Sorry this isn't in a nice table like the previous data. Will have to work this bug out in future reports.):
+
+```{r, echo = FALSE}
+library(car)
+
+fit <- lm(data = Hitters, wRC~Team)
+Hitters.aov <- aov(fit)
+Hitters.aov.summary <- summary(Hitters.aov)
+
+### Print results
+print(Hitters.aov.summary)
+
+
+## Perform Tukey-Kramer
+Hitters.tukey <- TukeyHSD(Hitters.aov)
+
+### Print results
+print(Hitters.tukey)
+
+## Homogenity of variance
+Hitters.levene <- leveneTest(fit)
+
+### Print results
+print(Hitters.levene)
+
+```
+
+To recap:
+
+-ANOVA shows that we can not reject the null hypothesis via the given values for hitters. This indicates that perhaps the teams were more similar than first believed across the board. Even at a 90% confidence interval, this would not have mattered.
+
+-Tukey analysis showed Pittsburg and Vallejo as the closest in hitting performance, with San Rafael and Sonoma second. Neither hit the 95% confidence interval, however.
+
+-Levene test showed a similar finding, although the homogeneity of the data is very staggered, as you'll see once we get to the graphs.
+  
+Now the pitchers, with a similar hypothesis test:
+
+```{r, echo = FALSE}
+library(car)
+
+fit <- lm(data = Pitchers, FIP~Team)
+Pitchers.aov <- aov(fit)
+Pitchers.aov.summary <- summary(Pitchers.aov)
+
+### Print results
+print(Pitchers.aov.summary)
+
+## Perform Tukey-Kramer
+Pitchers.tukey <- TukeyHSD(Pitchers.aov)
+
+### Print results
+print(Pitchers.tukey)
+
+## Homogenity of variance
+Pitchers.levene <- leveneTest(fit)
+
+### Print results
+print(Pitchers.levene)
+
+```
+
+Again, similar results, but even more so for pitching, as the high offense environment led to incredible variance amongst our pitchers.
+
+Finally, box and whisker plots were created for both wRC+ and FIP on a team by team basis. This is to determine how much variance there was between players on a given team and to also determine if a team performed better on the whole than another. For the hitters, this is what you see:
+
+```{r, echo = FALSE}
+library(ggplot2)
+bp<-ggplot(Hitters,aes(x=Team,y=wRC))+
+  stat_boxplot(geom = "errorbar") + # Add error bars to the boxplot
+  geom_boxplot() + # Add boxplot
+  labs(y = "wRC+", x = "Team")
+bp
+```
+
+As you can see, the Stompers performed extremely well, with a tight grouping of data relatively higher than the mean of the data, which was about 103. Most teams did have good performers, but at the same time, didn't have as many that performed as well as Sonoma did. This is an extremely good indicator of our team's performance, and is a major data point to show just how well the team performed as a whole.
+
+Now for the pitchers:
+
+```{r, echo = FALSE}
+library(ggplot2)
+bp<-ggplot(Pitchers,aes(x=Team,y=FIP))+
+  stat_boxplot(geom = "errorbar") + # Add error bars to the boxplot
+  geom_boxplot() + # Add boxplot
+  labs(y = "FIP", x = "Team")
+bp
+```
+
+Again, a very tight grouping that allows us to feel good about our overall performance, as our IQR tops out at about the mean FIP of the league and goes down from there. Another fantastic piece of evidence about how well our team did on the mound.
+
+The last two graphs really tell the story about how well we did as a team. Overall, having the type of pitching we did along with the hitting we did led us down the championship path. We should be very happy with our performance this season, and the numbers back it up.
